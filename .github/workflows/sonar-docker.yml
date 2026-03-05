@@ -9,7 +9,7 @@ on:
 env:
   SERVICE_NAME: product-service
   PORT: 3002
-  DOCKERHUB_NAMESPACE: your-dockerhub-username
+  DOCKERHUB_NAMESPACE: lasirm
 
 jobs:
   build-and-test:

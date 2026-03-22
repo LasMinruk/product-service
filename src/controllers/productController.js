@@ -1,105 +1,56 @@
-const { v4: uuidv4 } = require('uuid');
-const products = require('../data/products');
+const Product = require('../models/Product');
 
-// GET /products - Returns all products
-const getAllProducts = (req, res) => {
-  res.status(200).json({
-    success: true,
-    count: products.length,
-    data: products
-  });
+const getAllProducts = async (req, res) => {
+  try {
+    const products = await Product.find().sort({ createdAt: -1 });
+    res.status(200).json({ success: true, count: products.length, data: products });
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
+  }
 };
 
-// GET /products/:id - Returns a single product by ID
-const getProductById = (req, res) => {
-  const product = products.find(p => p.id === req.params.id);
-
-  if (!product) {
-    return res.status(404).json({
-      success: false,
-      message: `Product with ID ${req.params.id} not found`
-    });
+const getProductById = async (req, res) => {
+  try {
+    const product = await Product.findById(req.params.id);
+    if (!product) return res.status(404).json({ success: false, message: `Product with ID ${req.params.id} not found` });
+    res.status(200).json({ success: true, data: product });
+  } catch (error) {
+    if (error.name === 'CastError') return res.status(404).json({ success: false, message: `Product with ID ${req.params.id} not found` });
+    res.status(500).json({ success: false, message: error.message });
   }
-
-  res.status(200).json({
-    success: true,
-    data: product
-  });
 };
 
-// POST /products - Creates a new product
-const createProduct = (req, res) => {
-  const { name, description, price, stock, category } = req.body;
+const createProduct = async (req, res) => {
+  try {
+    const { name, description, price, stock, category } = req.body;
+    if (!name || !price) return res.status(400).json({ success: false, message: 'Please provide at least name and price' });
+    if (isNaN(price) || price <= 0) return res.status(400).json({ success: false, message: 'Price must be a positive number' });
 
-  // Validation
-  if (!name || !price) {
-    return res.status(400).json({
-      success: false,
-      message: 'Please provide at least name and price'
-    });
+    const product = await Product.create({ name, description, price: parseFloat(price), stock: stock || 0, category: category || 'General' });
+    res.status(201).json({ success: true, message: 'Product created successfully', data: product });
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
   }
-
-  if (isNaN(price) || price <= 0) {
-    return res.status(400).json({
-      success: false,
-      message: 'Price must be a positive number'
-    });
-  }
-
-  const newProduct = {
-    id: `prod-${uuidv4().split('-')[0]}`,
-    name,
-    description: description || '',
-    price: parseFloat(price),
-    stock: stock || 0,
-    category: category || 'General',
-    createdAt: new Date().toISOString()
-  };
-
-  products.push(newProduct);
-
-  res.status(201).json({
-    success: true,
-    message: 'Product created successfully',
-    data: newProduct
-  });
 };
 
-// PATCH /products/:id/stock - Reduce stock when order is placed
-// This is called by Order Service after a successful order
-const updateStock = (req, res) => {
-  const product = products.find(p => p.id === req.params.id);
+// Called by Order Service to reduce stock
+const updateStock = async (req, res) => {
+  try {
+    const product = await Product.findById(req.params.id);
+    if (!product) return res.status(404).json({ success: false, message: `Product with ID ${req.params.id} not found` });
 
-  if (!product) {
-    return res.status(404).json({
-      success: false,
-      message: `Product with ID ${req.params.id} not found`
-    });
+    const { quantity } = req.body;
+    if (!quantity || isNaN(quantity) || quantity <= 0) return res.status(400).json({ success: false, message: 'Please provide a valid quantity' });
+    if (product.stock < quantity) return res.status(400).json({ success: false, message: `Insufficient stock. Available: ${product.stock}` });
+
+    product.stock -= parseInt(quantity);
+    await product.save();
+
+    res.status(200).json({ success: true, message: 'Stock updated successfully', data: product });
+  } catch (error) {
+    if (error.name === 'CastError') return res.status(404).json({ success: false, message: `Product with ID ${req.params.id} not found` });
+    res.status(500).json({ success: false, message: error.message });
   }
-
-  const { quantity } = req.body;
-
-  if (!quantity || isNaN(quantity) || quantity <= 0) {
-    return res.status(400).json({
-      success: false,
-      message: 'Please provide a valid quantity'
-    });
-  }
-
-  if (product.stock < quantity) {
-    return res.status(400).json({
-      success: false,
-      message: `Insufficient stock. Available: ${product.stock}`
-    });
-  }
-
-  product.stock -= quantity;
-
-  res.status(200).json({
-    success: true,
-    message: 'Stock updated successfully',
-    data: product
-  });
 };
 
 module.exports = { getAllProducts, getProductById, createProduct, updateStock };
